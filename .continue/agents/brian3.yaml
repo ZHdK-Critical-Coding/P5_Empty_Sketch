@@ -1,0 +1,137 @@
+# Continue config for Spark AI — Qwen3.5-35B-A3B served by vLLM.
+# Drop at ~/.continue/config.yaml on each developer's laptop.
+# Replace 192.168.138.79 with the Spark's LAN address (or Tailscale name).
+#
+# Same vLLM backend serves both Continue and Open WebUI.
+# Works for both BF16 and NVFP4 modes (the served model name is the same).
+
+name: Spark Vibe
+version: 1.0.0
+schema: v1
+
+models:
+  - name: Qwen3.5-35B (Spark)
+    provider: openai
+    model: qwen3.5-35b              # matches --served-model-name in start_vllm.sh
+    apiBase: http://192.168.138.79:8000/v1
+    apiKey: NONE
+    roles:
+      - chat
+      - edit
+      - apply
+    # Custom served-name means Continue can't auto-detect capabilities.
+    # The model supports both — declare them explicitly.
+    capabilities:
+      - tool_use
+      # - image_input    # uncomment if you want to paste screenshots into chat
+    defaultCompletionOptions:
+      contextLength: 262144         # matches vLLM --max-model-len (262K native)
+      maxTokens: 4096
+      # Per adadrag's README, "Instruct - General" preset for chat work.
+      # For pure reasoning, raise temp to 1.0 and top_p to 0.95.
+      temperature: 0.7
+      topP: 0.8
+
+  # ── Optional: disable thinking mode for faster responses ────────────────
+  # Same backend, but adds chat_template_kwargs to skip the <think> step.
+  # Use this entry when you want quick edits without chain-of-thought delay.
+  - name: Qwen3.5-35B (fast, no-think)
+    provider: openai
+    model: qwen3.5-35b
+    apiBase: http://192.168.138.79:8000/v1
+    apiKey: NONE
+    roles:
+      - edit
+      - apply
+    capabilities:
+      - tool_use
+    defaultCompletionOptions:
+      contextLength: 262144
+      maxTokens: 2048
+      temperature: 0.7
+      topP: 0.8
+    requestOptions:
+      extraBodyProperties:
+        chat_template_kwargs:
+          enable_thinking: false
+
+# ── Context providers ────────────────────────────────────────────────
+# Available via @-mentions in chat (e.g. @code, @diff, @codebase).
+# Continue ships a local Transformers.js embedder so @codebase works
+# without a separate embedding model on the Spark.
+
+context:
+  - provider: code
+  - provider: diff
+  - provider: terminal
+  - provider: problems
+  - provider: folder
+  - provider: codebase
+  - provider: file
+  - provider: open
+  - provider: docs
+  - provider: tree
+  - provider: currentFile
+  - provider: clipboard
+
+# ── Rules ────────────────────────────────────────────────────────────
+# Appended to the system prompt for every chat/edit/apply request.
+
+rules:
+  - When fixing a bug, explain the root cause in one sentence before showing the fix.
+  - Don't add comments that just restate the code.
+  - Prefer the conventions already used in the surrounding file over your own preferences.
+  - If a request is ambiguous, ask one clarifying question instead of guessing.
+
+# ── Slash-command prompts ────────────────────────────────────────────
+# Invoke in chat with /test, /explain, etc.
+
+prompts:
+  - name: test
+    description: Write unit tests for the selected code
+    prompt: |
+      Write thorough unit tests for the selected code.
+      Use whatever testing framework is already present in the project.
+      Cover the happy path, edge cases, and error paths.
+      If the code has side effects, mock them.
+
+  - name: explain
+    description: Explain the selected code
+    prompt: |
+      Explain what this code does.
+      Start with a one-sentence summary.
+      Then walk through the key decisions and any non-obvious behavior.
+      Call out potential bugs or edge cases you spot.
+
+  - name: review
+    description: Code review as if it were a PR
+    prompt: |
+      Review this code as if it were a pull request. Focus on:
+      - Correctness and bugs
+      - Security concerns
+      - Performance issues
+      - Readability and maintainability
+      Be concrete: cite specific lines and suggest specific fixes.
+      Skip nitpicks unless they meaningfully affect quality.
+
+  - name: refactor
+    description: Refactor for clarity without changing behavior
+    prompt: |
+      Refactor the selected code for clarity and maintainability.
+      Preserve behavior exactly. Show the refactored code, then a
+      short bullet list of what changed and why.
+
+  - name: types
+    description: Add or tighten type annotations
+    prompt: |
+      Add or tighten static type annotations on the selected code.
+      Don't change runtime behavior. Prefer narrow, accurate types over
+      broad ones (e.g. unions and literals over `any`/`unknown`).
+
+  - name: commit
+    description: Suggest a conventional commit message
+    prompt: |
+      Based on the diff in @diff, write a conventional commit message.
+      Format: `<type>(<scope>): <subject>` then a blank line then a body
+      explaining the why (not the what — the diff shows the what).
+      Keep the subject under 72 characters.
