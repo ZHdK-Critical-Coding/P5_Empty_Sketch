@@ -1,0 +1,230 @@
+# Continue config for Spark AI — Qwen3.6-35B-A3B, tuned for p5.js creative coding.
+# Drop at ~/.continue/config.yaml. Replace SPARK_IP.
+#
+# Three model profiles tuned for the three modes of creative coding:
+#   1. Sketch   — high creativity, generative ideas, novel patterns
+#   2. Refine   — moderate creativity, iterating on existing sketches
+#   3. Debug    — deterministic, no thinking step, fast for fixes
+#
+# Switch in Continue's model dropdown per task.
+
+name: p5.js ZHdK Critical Coding
+version: 1.0.0
+schema: v1
+
+models:
+  # ─────────────────────────────────────────────────────────────────
+  # 1. SKETCH — for "give me a generative sketch of..."
+  # Higher temperature, top_p, top_k for diverse visual ideas.
+  # Thinking ON so the model reasons about composition/movement.
+  # ─────────────────────────────────────────────────────────────────
+  - name: ✦ Sketch (creative)
+    provider: openai
+    model: qwen3.6-35b
+    apiBase: http://SPARK_IP:8000/v1
+    apiKey: NONE
+    roles:
+      - chat
+    capabilities:
+      - tool_use
+    defaultCompletionOptions:
+      contextLength: 262144
+      maxTokens: 6144              # sketches can be long with comments
+      temperature: 1.0             # max variance in ideas
+      topP: 0.95
+    requestOptions:
+      extraBodyProperties:
+        top_k: 40
+        repetition_penalty: 1.05   # discourage reusing the same patterns
+        presence_penalty: 0.3      # nudge toward new visual concepts
+
+  # ─────────────────────────────────────────────────────────────────
+  # 2. REFINE — for "make this prettier", "smoother", "add motion"
+  # Balanced sampling. Thinking ON for thoughtful iteration.
+  # ─────────────────────────────────────────────────────────────────
+  - name: ✎ Refine (iterate)
+    provider: openai
+    model: qwen3.6-35b
+    apiBase: http://SPARK_IP:8000/v1
+    apiKey: NONE
+    roles:
+      - chat
+      - edit
+      - apply
+    capabilities:
+      - tool_use
+    defaultCompletionOptions:
+      contextLength: 262144
+      maxTokens: 4096
+      temperature: 0.8
+      topP: 0.9
+    requestOptions:
+      extraBodyProperties:
+        top_k: 40
+        repetition_penalty: 1.0
+
+  # ─────────────────────────────────────────────────────────────────
+  # 3. DEBUG — for "why is this flickering", "fix the canvas size"
+  # Low temperature, thinking OFF. Fast, deterministic answers.
+  # ─────────────────────────────────────────────────────────────────
+  - name: 🔧 Debug (deterministic)
+    provider: openai
+    model: qwen3.6-35b
+    apiBase: http://SPARK_IP:8000/v1
+    apiKey: NONE
+    roles:
+      - edit
+      - apply
+    capabilities:
+      - tool_use
+    defaultCompletionOptions:
+      contextLength: 262144
+      maxTokens: 2048
+      temperature: 0.3
+      topP: 0.8
+    requestOptions:
+      extraBodyProperties:
+        chat_template_kwargs:
+          enable_thinking: false   # skip <think> for speed
+        top_k: 20
+        repetition_penalty: 1.0
+
+# ── Context providers ────────────────────────────────────────────────
+# @url is handy for pasting reference.p5js.org pages into chat.
+
+context:
+  - provider: code
+  - provider: diff
+  - provider: terminal
+  - provider: problems
+  - provider: folder
+  - provider: codebase
+  - provider: file
+  - provider: open
+  - provider: docs
+  - provider: tree
+  - provider: currentFile
+  - provider: clipboard
+  - provider: url
+
+# ── p5.js-aware system rules ─────────────────────────────────────────
+
+rules:
+  # Library version & API surface
+  - Use p5.js 1.x API. Avoid p5.js 2.x experimental APIs unless I ask.
+  - Never invent functions. Stick to documented p5.js functions; if uncertain, say so instead of guessing.
+  - Don't use Processing (Java) syntax. This is p5.js — JavaScript only.
+  - Default to global mode; only use instance mode (`new p5(sketch)`) when I ask.
+
+  # Structure
+  - Every sketch must have `setup()` and `draw()`. Put `createCanvas()` in setup, not draw.
+  - Default canvas to `windowWidth, windowHeight` and include `windowResized()` unless I specify fixed dimensions.
+  - Put magic numbers (counts, scales, speeds) at the top as `const` so I can tweak them.
+
+  # Animation hygiene
+  - Use `frameCount` or `millis()` for time-based animation, not `Date.now()`.
+  - Call `background()` once in `setup()` for persistent trails; only call inside `draw()` if frame-by-frame clearing is needed.
+  - When using `noise()`, call `noiseSeed()` at the top of setup so the piece is reproducible.
+  - When using `random()` for layout (not per-frame jitter), call `randomSeed()` similarly.
+
+  # Performance
+  - For >1000 particles or heavy shapes, suggest WEBGL mode.
+  - Never call `loadFont()`, `loadImage()`, `loadSound()` in `draw()` — always in `preload()`.
+  - Avoid `pixelDensity(displayDensity())` unless I ask; it doubles render cost on retina.
+  - Use `push()`/`pop()` for any local transformation; never leave global state mutated.
+
+  # Style
+  - Comment the *idea* of the sketch at the top (2-3 lines), not every line.
+  - When suggesting math (Perlin noise, sine waves, polar coords), include a short comment explaining the geometric intuition.
+
+  # Behavior
+  - If I describe a visual ("rippling lines", "drifting dots"), give me a complete runnable sketch — not a snippet I have to assemble.
+  - If I ask for variations, give 2-3 fundamentally different ideas with one-line descriptions, not minor tweaks.
+
+# ── Slash commands tuned for p5.js workflows ─────────────────────────
+
+prompts:
+  - name: sketch
+    description: Generate a complete p5.js sketch from a description
+    prompt: |
+      Write a complete, runnable p5.js sketch matching this idea.
+      Structure:
+        1. A 2-line comment at the top describing what we're making.
+        2. Tweakable constants block.
+        3. setup() with createCanvas + any one-time state.
+        4. draw() with the main animation loop.
+        5. windowResized() if the canvas uses windowWidth/Height.
+        6. Any helpers below.
+      Default to a square or 16:9 canvas using windowWidth/windowHeight.
+      Pick colors that work together — avoid pure black/white unless
+      the concept demands it.
+
+  - name: variations
+    description: Give 3 distinct variations on the current sketch
+    prompt: |
+      Look at the selected sketch. Give me 3 fundamentally different
+      directions to take it — not parameter tweaks, different ideas.
+      For each: one-line description, then the modified code.
+      Make them visually distinct from each other.
+
+  - name: motion
+    description: Add or refine animation on the current sketch
+    prompt: |
+      Add motion to the selected sketch. Use frameCount-based time
+      where possible. Make the motion feel organic — easing, noise,
+      or natural sine cycles rather than linear interpolation.
+      Keep the existing visual identity, just bring it to life.
+
+  - name: explain
+    description: Explain a generative-art technique used in this code
+    prompt: |
+      Explain what this code does as a generative-art technique:
+        - The visual outcome in one sentence.
+        - The math/algorithm at its core, with geometric intuition.
+        - Which parameters control what visual property.
+        - One or two ways to extend it.
+
+  - name: optimize
+    description: Find performance issues in the current sketch
+    prompt: |
+      Profile the selected sketch for performance issues:
+        - Allocations in draw() that should be hoisted (new vector/array/object every frame).
+        - Repeated math that could be cached.
+        - Loops with many shape() calls that could move to WEBGL.
+        - Unnecessary pixelDensity or canvas resize work.
+      Show concrete fixes, not just advice.
+
+  - name: shadertoy
+    description: Port a Shadertoy fragment to p5.js WEBGL
+    prompt: |
+      Convert the pasted Shadertoy fragment into a p5.js WEBGL sketch.
+      Use a single full-screen quad, pass uTime / uResolution / uMouse
+      as uniforms. Keep the shader logic intact; just adapt the
+      entry point and varyings.
+
+  - name: refactor
+    description: Refactor a messy sketch into clean structure
+    prompt: |
+      Refactor the selected sketch:
+        - Pull magic numbers into a CONFIG block at the top.
+        - Extract logical chunks into named helper functions.
+        - Add a single block comment at the top describing the piece.
+        - Don't change behavior or visual output.
+
+  - name: palette
+    description: Suggest a color palette for the current concept
+    prompt: |
+      Suggest 3 color palettes that fit the sketch's concept.
+      For each:
+        - A descriptive name (e.g. "twilight beach", "neon brutalism").
+        - 4-6 hex colors with one-line role notes (bg, primary, accent...).
+        - A one-line use case ("for dense particle fields", etc).
+      Don't write code — just the palettes.
+
+  - name: interactive
+    description: Add mouse/keyboard interaction to the sketch
+    prompt: |
+      Add meaningful interaction to the selected sketch.
+      Use `mouseX/mouseY` to drive at least one continuous parameter,
+      and bind 1-2 keys for discrete state changes (palette swap,
+      pause, reset). Document the controls in a comment at the top.
