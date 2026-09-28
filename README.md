@@ -18,11 +18,14 @@ browser (Live Server is configured to open Chrome).
    `samplavigne.p5-vscode` (p5.js snippets), `ritwickdey.liveserver`
    (local server with auto-reload) and `continue.continue` (AI coding
    assistant, optional).
-3. Start Live Server (click **Go Live** in the status bar). The sketch opens
-   at `http://127.0.0.1:5500` and reloads whenever you save a file.
 
 Libraries (in `libraries/`): p5.js 1.10.0, p5.sound 1.0.1 (included, not
 used — sound functions work without adding a `<script>` tag).
+
+## How to Run
+
+Start Live Server (click **Go Live** in the status bar). The sketch opens
+at `http://127.0.0.1:5500` and reloads whenever you save a file.
 
 ## Coding Help
 
